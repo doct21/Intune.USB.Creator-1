@@ -23,7 +23,7 @@ function Get-AutopilotPolicy {
                 }
             }
             #region Connect to Intune
-            Connect-MSGraph -clientid "f80f1165-3c77-40d8-8606-0f78430bd8c4" | Out-Null
+            Connect-MSGraph -clientid "f80f1165-3c77-40d8-8606-0f78430bd8c4"
             #endregion Connect to Intune
             #region Get policies
             $apPolicies = Get-AutopilotProfile
