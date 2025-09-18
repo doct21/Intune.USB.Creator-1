@@ -19,3 +19,4 @@ foreach ($import in @($Public + $Private))
     }
 }
 #endregion
+Export-ModuleMember -Function '*'
