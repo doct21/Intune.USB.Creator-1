@@ -47,7 +47,17 @@ function Publish-ImageToUSB {
         #endregion
         #region get winPE / unpack to temp
         Write-Host "`nGetting WinPE media.." -ForegroundColor Yellow
-        Get-RemoteFile -fileUri $winPEPath -destination $usb.downloadPath -expand
+        if (Test-Path -Path $winPEPath -ErrorAction SilentlyContinue) {
+            # The path is a local file. Copy it, then expand it.
+            Write-Host "Found local WinPE ISO, copying..." -ForegroundColor Cyan
+            $sourceIso = Copy-Item -Path $winPEPath -Destination $usb.downloadPath -PassThru
+            Write-Host "Expanding WinPE ISO..." -ForegroundColor Cyan
+            Expand-Archive -LiteralPath $sourceIso.FullName -DestinationPath $usb.WinPEPath -Force
+        }
+        else {
+            # The path is a URL. Use the original download function.
+            Get-RemoteFile -fileUri $winPEPath -destination $usb.downloadPath -expand
+        }
         #endregion
         #region get wim from ISO
         Write-Host "`nGetting install.wim from windows media.." -ForegroundColor Yellow -NoNewline
