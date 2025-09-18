@@ -41,7 +41,7 @@ Connect-MgGraph -ClientId $ClientId -TenantId $TenantId -Scopes `
     "DeviceManagementConfiguration.ReadWrite.All",
     "DeviceManagementManagedDevices.ReadWrite.All"
 
-Select-MgProfile -Name beta
+
 #endregion#endregion Connect to Intune
 {            #region Get policies
      {
