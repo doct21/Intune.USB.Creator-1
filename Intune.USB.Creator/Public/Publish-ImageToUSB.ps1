@@ -1,3 +1,12 @@
+
+using module '..\Classes\ImageUSB.psm1'
+
+function Test-Admin {
+    $currentUser = New-Object Security.Principal.WindowsPrincipal $([Security.Principal.WindowsIdentity]::GetCurrent())
+    $currentUser.IsInRole([Security.Principal.WindowsBuiltinRole]::Administrator)
+}
+
+
 function Publish-ImageToUSB {
     [cmdletbinding()]
     param (
@@ -19,6 +28,8 @@ function Publish-ImageToUSB {
         [parameter(ParameterSetName = "Build", Mandatory = $true)]
         [string]$diskNum
     )
+
+    $script:provisionUrl = "C:\Dev\Intune.USB.Creator\Intune.USB.Creator\Invoke-Provision\Invoke-Provision.ps1"
     #region Main Process
     try {
         #region start diagnostic // show welcome
