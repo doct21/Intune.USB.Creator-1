@@ -22,7 +22,7 @@ function Get-AutopilotPolicy {
                     Import-Module $_
                 }
             }
-            #region Connect to Intune
+#region Connect to Intune
             #Connect-MgGraph -clientid "f80f1165-3c77-40d8-8606-0f78430bd8c4"  -Scopes "DeviceManagementApps.ReadWrite.All","DeviceManagementConfiguration.ReadWrite.All","DeviceManagementManagedDevices.ReadWrite.All"
             region Connect to Intune
 $TenantId = "a5f8bf0a-3503-4872-bc1d-48390acb622c"
