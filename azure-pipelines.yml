@@ -9,7 +9,7 @@ trigger:
       - /.gitignore
       - /readme.md
       - /.tests
-      
+
 pr: none
 
 stages:
@@ -19,17 +19,16 @@ stages:
         pool:
           vmImage: 'vs2017-win2016'
         steps:
-          - task: PowerShell@2
-            displayName: Pre-Build
+         - task: PowerShell@2
+            displayName: 'Install required PowerShell modules'
             inputs:
               targetType: 'inline'
               script: |
                 Install-Module -Name Pester -MaximumVersion 4.10.1 -Verbose -Scope CurrentUser -SkipPublisherCheck -Force
-                Install-Module WindowsAutoPilotIntune -Scope CurrentUser -Force
-                Install-Module Microsoft.Graph.Intune -Scope CurrentUser -Force
-                Install-Module TestJsonSchema -Scope CurrentUser -SkipPublisherCheck -ErrorAction SilentlyContinue -Force
-                Install-Module PSScriptAnalyzer -Scope CurrentUser -SkipPublisherCheck -ErrorAction SilentlyContinue -Force
-              pwsh: true
+                Install-Module -Name Microsoft.Graph -Scope CurrentUser -Force
+                Install-Module -Name TestJsonSchema -Scope CurrentUser -SkipPublisherCheck -ErrorAction SilentlyContinue -Force
+                Install-Module -Name PSScriptAnalyzer -Scope CurrentUser -SkipPublisherCheck -ErrorAction SilentlyContinue -Force
+    pwsh: true
 
           - task: PowerShell@2
             displayName: Build

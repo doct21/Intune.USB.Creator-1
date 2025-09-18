@@ -9,8 +9,7 @@ function Get-AutopilotPolicy {
     try {
         if (!(Test-Path "$FileDestination\AutopilotConfigurationFile.json" -ErrorAction SilentlyContinue)) {
             $modules = @(
-                "WindowsAutoPilotIntune",
-                "Microsoft.Graph.Intune"
+                "Microsoft.Graph"
             )
             if ($PSVersionTable.PSVersion.Major -eq 7) {
                 $modules | ForEach-Object {
