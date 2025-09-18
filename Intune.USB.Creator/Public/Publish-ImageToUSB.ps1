@@ -118,25 +118,25 @@ function Publish-ImageToUSB {
         #endregion download and apply powershell 7 to usb
 
         #region Copy PowerShell Modules to USB  <-- ADD THIS ENTIRE NEW SECTION
-        Write-Host "`nCopying required PowerShell modules to USB.." -ForegroundColor Yellow
-        $modulePath = ($env:PSModulePath -split ';')[0]
-        $destination = "$($usb.drive):\scripts\pwsh\Modules"
-        $modulesToCopy = @(
-            "Microsoft.Graph.Authentication",
-            "Microsoft.Graph.DeviceManagement",
-            "Microsoft.Graph.Groups"
-        )
-        foreach ($module in $modulesToCopy) {
-            $source = Join-Path $modulePath $module
-            if (Test-Path $source) {
-                Write-Host "Copying module $module..." -ForegroundColor Cyan
-                Copy-Item -Path $source -Destination $destination -Recurse -Force
-            }
-            else {
-                Write-Warning "Could not find module $module at path $source"
-            }
-        }
-        #endregion
+        Write-Host "`nCopying required PowerShell modules to USB.." -ForegroundColor Yellow
+        $modulePath = ($env:PSModulePath -split ';')[0]
+        $destination = "$($usb.drive):\scripts\pwsh\Modules"
+        $modulesToCopy = @(
+            "Microsoft.Graph.Authentication",
+            "Microsoft.Graph.DeviceManagement",
+            "Microsoft.Graph.Groups"
+        )
+        foreach ($module in $modulesToCopy) {
+            $source = Join-Path $modulePath $module
+            if (Test-Path $source) {
+                    Write-Host "Copying module $module..." -ForegroundColor Cyan
+                    Copy-Item -Path $source -Destination $destination -Recurse -Force
+            }
+            else {
+                    Write-Warning "Could not find module $module at path $source"
+            }
+        }
+        #endregion
         $completed = $true
     }
     catch {
