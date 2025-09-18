@@ -87,6 +87,48 @@ function Publish-ImageToUSB {
         Write-Host "`nDisk number " $diskNum " selected." -ForegroundColor Cyan
         $usb = Set-USBPartition -usbClass $usb -diskNum $chooseDisk
         #endregion
+        #region Create and Inject StartNet.cmd, WinPE Components, and Drivers
+        Write-Host "`nCustomizing WinPE image..." -ForegroundColor Yellow
+        $mountDir = Join-Path $env:TEMP "Mount"
+        if (!(Test-Path $mountDir)) { New-Item -Path $mountDir -ItemType Directory | Out-Null }
+        $bootWim = Join-Path $usb.WinPEPath "sources\boot.wim"
+
+        # Mount the WinPE boot.wim file
+        Mount-WindowsImage -ImagePath $bootWim -Index 1 -Path $mountDir
+
+        # Add required optional components for PowerShell and GUI support
+        $adkPath = "C:\Program Files (x86)\Windows Kits\10\Assessment and Deployment Kit\Windows Preinstallation Environment\amd64\WinPE_OCs"
+        $packages = @(
+            "WinPE-WMI.cab",
+            "WinPE-NetFx.cab",
+            "WinPE-Scripting.cab",
+            "WinPE-PowerShell.cab"
+        )
+        foreach ($package in $packages) {
+            Write-Host "Adding WinPE package: $package" -ForegroundColor Cyan
+            Add-WindowsPackage -Path $mountDir -PackagePath "$adkPath\$package"
+        }
+
+        # Inject Drivers
+        Write-Host "Injecting drivers into WinPE image..." -ForegroundColor Yellow
+        # --- IMPORTANT: Change this path to the folder containing your drivers ---
+        $driverPath = "C:\Drivers"
+        Add-WindowsDriver -Path $mountDir -Driver $driverPath -Recurse
+
+        # Define the content for StartNet.cmd to auto-run the provisioning script
+        $startNetContent = @"
+@echo off
+wpeinit
+X:\scripts\pwsh\pwsh.exe -ExecutionPolicy Bypass -File "D:\scripts\Invoke-Provision.ps1"
+"@
+
+        # Write the new StartNet.cmd to the mounted image
+        $startNetPath = Join-Path $mountDir "Windows\System32\StartNet.cmd"
+        Set-Content -Path $startNetPath -Value $startNetContent
+
+        # Save the changes and dismount the image
+        Dismount-WindowsImage -Path $mountDir -Save
+        #endregion
         #region write WinPE to USB
         Write-Host "`nWriting WinPE to USB.." -ForegroundColor Yellow -NoNewline
         Write-ToUSB -Path "$($usb.winPEPath)\*" -Destination "$($usb.drive):\"
