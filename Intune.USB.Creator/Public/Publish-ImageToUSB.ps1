@@ -29,7 +29,7 @@ function Publish-ImageToUSB {
         [string]$diskNum
     )
 
-    $script:provisionUrl = "C:\Dev\Intune.USB.Creator\Intune.USB.Creator\Invoke-Provision\Invoke-Provision.ps1"
+   $script:provisionUrl = "C:\Dev\Intune.USB.Creator\Invoke-Provision\Invoke-Provision.ps1"
     #region Main Process
     try {
         #region start diagnostic // show welcome
