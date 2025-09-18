@@ -1,5 +1,5 @@
-#requires -Modules @{ ModuleName="WindowsAutoPilotIntune"; ModuleVersion="4.3" }
-#requires -Modules @{ ModuleName="Microsoft.Graph.Intune"; ModuleVersion="6.1907.1.0"}
+#requires -Modules Microsoft.Graph.Authentication, Microsoft.Graph.DeviceManagement, Microsoft.Graph.Groups
+
 function Get-AutopilotPolicy {
     [cmdletbinding()]
     param (
@@ -8,8 +8,11 @@ function Get-AutopilotPolicy {
     )
     try {
         if (!(Test-Path "$FileDestination\AutopilotConfigurationFile.json" -ErrorAction SilentlyContinue)) {
+            # List only the specific sub-modules needed
             $modules = @(
-                "Microsoft.Graph"
+                "Microsoft.Graph.Authentication",
+                "Microsoft.Graph.DeviceManagement",
+                "Microsoft.Graph.Groups"
             )
             if ($PSVersionTable.PSVersion.Major -eq 7) {
                 $modules | ForEach-Object {
@@ -21,9 +24,15 @@ function Get-AutopilotPolicy {
                     Import-Module $_
                 }
             }
+        }
+    }
+    # Add a catch block for proper error handling
+    catch {
+        Write-Error "An error occurred in Get-AutopilotPolicy: $($_.Exception.Message)"
+    }
+}
 #region Connect to Intune
-            #Connect-MgGraph -clientid "f80f1165-3c77-40d8-8606-0f78430bd8c4"  -Scopes "DeviceManagementApps.ReadWrite.All","DeviceManagementConfiguration.ReadWrite.All","DeviceManagementManagedDevices.ReadWrite.All"
-            region Connect to Intune
+
 $TenantId = "a5f8bf0a-3503-4872-bc1d-48390acb622c"
 $ClientId = "f80f1165-3c77-40d8-8606-0f78430bd8c4"
 
@@ -34,7 +43,11 @@ Connect-MgGraph -ClientId $ClientId -TenantId $TenantId -Scopes `
 
 Select-MgProfile -Name beta
 #endregion#endregion Connect to Intune
-            #region Get policies
+{            #region Get policies
+     {
+
+            {
+
             $apPolicies = Get-AutopilotProfile
             if (!($apPolicies)) {
                 Write-Warning "No Autopilot policies found.."
@@ -60,19 +73,16 @@ Select-MgProfile -Name beta
         }
     }
     catch {
-        $errorMsg = $_
+        Write-Warning $_
     }
     finally {
         if ($PSVersionTable.PSVersion.Major -eq 7) {
-            $modules = @(
+            @(
                 "WindowsAutoPilotIntune",
                 "Microsoft.Graph.Intune"
             ) | ForEach-Object {
                 Remove-Module $_ -ErrorAction SilentlyContinue 3>$null
             }
-        }
-        if ($errorMsg) {
-            Write-Warning $errorMsg
         }
     }
 }
