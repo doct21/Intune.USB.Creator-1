@@ -1,5 +1,3 @@
-#requires -Modules Microsoft.Graph.Authentication, Microsoft.Graph.DeviceManagement, Microsoft.Graph.Groups
-
 function Get-AutopilotPolicy {
     [cmdletbinding()]
     param (
@@ -7,13 +5,14 @@ function Get-AutopilotPolicy {
         [System.IO.FileInfo]$FileDestination
     )
     try {
-        # 1. Force a new connection to Microsoft Graph
+        # 1. Force a new connection to Microsoft Graph with required permissions
         Disconnect-MgGraph -ErrorAction SilentlyContinue
-        Connect-MgGraph -Scopes "DeviceManagementServiceConfig.Read.All"
+        # Note: We've added "Organization.Read.All" to get the Tenant ID
+        Connect-MgGraph -Scopes "DeviceManagementServiceConfig.Read.All", "Organization.Read.All"
 
         # 2. Get all available Autopilot profiles from your tenant
         Write-Host "Getting available Autopilot profiles..." -ForegroundColor Cyan
-        $profiles = Get-MgDeviceManagementWindowsAutopilotDeploymentProfile
+        $profiles = Get-MgBetaDeviceManagementWindowsAutopilotDeploymentProfile
 
         if (!$profiles) {
             throw "No Autopilot profiles were found in your tenant."
@@ -33,20 +32,27 @@ function Get-AutopilotPolicy {
             throw "No Autopilot profile was selected."
         }
 
-        # 4. Get the JSON content of the selected profile and decode it
-        $jsonProfile = ($selectedProfile | Get-MgDeviceManagementWindowsAutopilotDeploymentProfile).jsonRepresentation.ToString().Trim('"')
-        $jsonBytes = [System.Convert]::FromBase64String($jsonProfile)
-        $jsonString = [System.Text.Encoding]::UTF8.GetString($jsonBytes)
+        # 4. Manually build the JSON object with the required structure
+        Write-Host "Building Autopilot JSON for profile: $($selectedProfile.DisplayName)" -ForegroundColor Cyan
+        $tenantId = (Get-MgOrganization).Id
+        $jsonObject = [PSCustomObject]@{
+            CloudAssignedTenantId = $tenantId
+            CloudAssignedAutopilotProfile = $selectedProfile
+        }
 
-        # 5. Save the JSON to the specified file
+        # 5. Convert the custom object to a JSON string
+        # The -Depth parameter ensures all nested properties are included
+        $jsonString = $jsonObject | ConvertTo-Json -Depth 10
+
+        # 6. Save the JSON to the specified file
         $filePath = Join-Path $FileDestination.FullName "AutopilotConfigurationFile.json"
         Set-Content -Path $filePath -Value $jsonString
-        Write-Host "Successfully saved Autopilot profile '$($selectedProfile.DisplayName)' to $filePath" -ForegroundColor Green
+        Write-Host "Successfully saved Autopilot profile to $filePath" -ForegroundColor Green
     }
     catch {
         Write-Error "An error occurred in Get-AutopilotPolicy: $($_.Exception.Message)"
     }
-} Connect to Intune
+}
 
 $TenantId = "a5f8bf0a-3503-4872-bc1d-48390acb622c"
 $ClientId = "f80f1165-3c77-40d8-8606-0f78430bd8c4"
