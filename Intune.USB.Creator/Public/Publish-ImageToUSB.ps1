@@ -47,16 +47,27 @@ function Publish-ImageToUSB {
         #endregion
         #region get winPE / unpack to temp
         Write-Host "`nGetting WinPE media.." -ForegroundColor Yellow
+
+        $winPEIsoFile = $null
         if (Test-Path -Path $winPEPath -ErrorAction SilentlyContinue) {
-            # The path is a local file. Copy it, then expand it.
-            Write-Host "Found local WinPE ISO, copying..." -ForegroundColor Cyan
-            $sourceIso = Copy-Item -Path $winPEPath -Destination $usb.downloadPath -PassThru
-            Write-Host "Expanding WinPE ISO..." -ForegroundColor Cyan
-            Expand-Archive -LiteralPath $sourceIso.FullName -DestinationPath $usb.WinPEPath -Force
+            # The path is a local file
+            Write-Host "Found local WinPE ISO file." -ForegroundColor Cyan
+            $winPEIsoFile = $winPEPath
         }
         else {
-            # The path is a URL. Use the original download function.
-            Get-RemoteFile -fileUri $winPEPath -destination $usb.downloadPath -expand
+            # The path is a URL, so download it
+            Write-Host "Local file not found, attempting to download from URL..." -ForegroundColor Cyan
+            # This line calls a helper function from the module to download the file
+            $winPEIsoFile = Get-RemoteFile -fileUri $winPEPath -destination $usb.downloadPath
+        }
+
+        # Now that we have the ISO path (either local or downloaded), expand it
+        if ($winPEIsoFile) {
+            Write-Host "Expanding WinPE ISO: $winPEIsoFile" -ForegroundColor Cyan
+            Expand-Archive -LiteralPath $winPEIsoFile -DestinationPath $usb.WinPEPath -Force
+        }
+        else {
+            throw "FATAL: Could not find or download the WinPE media from path: $winPEPath"
         }
         #endregion
         #region get wim from ISO
@@ -107,23 +118,23 @@ function Publish-ImageToUSB {
         Mount-WindowsImage -ImagePath $bootWim -Index 1 -Path $mountDir
 
         # Add required optional components for PowerShell and GUI support
-        $adkPath = "C:\Program Files (x86)\Windows Kits\10\Assessment and Deployment Kit\Windows Preinstallation Environment\amd64\WinPE_OCs"
-        $packages = @(
-            "WinPE-WMI.cab",
-            "WinPE-NetFx.cab",
-            "WinPE-Scripting.cab",
-            "WinPE-PowerShell.cab"
-        )
-        foreach ($package in $packages) {
-            Write-Host "Adding WinPE package: $package" -ForegroundColor Cyan
-            Add-WindowsPackage -Path $mountDir -PackagePath "$adkPath\$package"
-        }
+        #$adkPath = "C:\Program Files (x86)\Windows Kits\10\Assessment and Deployment Kit\Windows Preinstallation Environment\amd64\WinPE_OCs"
+        #$packages = @(
+            #"WinPE-WMI.cab",
+            #"WinPE-NetFx.cab",
+            #"WinPE-Scripting.cab",
+            #"WinPE-PowerShell.cab"
+       # )
+        #foreach ($package in $packages) {
+            #Write-Host "Adding WinPE package: $package" -ForegroundColor Cyan
+            #Add-WindowsPackage -Path $mountDir -PackagePath "$adkPath\$package"
+        #}
 
         # Inject Drivers
-        Write-Host "Injecting drivers into WinPE image..." -ForegroundColor Yellow
+        #Write-Host "Injecting drivers into WinPE image..." -ForegroundColor Yellow
         # --- IMPORTANT: Change this path to the folder containing your drivers ---
-        $driverPath = "C:\Drivers"
-        Add-WindowsDriver -Path $mountDir -Driver $driverPath -Recurse
+        #$driverPath = "C:\Drivers"
+        #Add-WindowsDriver -Path $mountDir -Driver $driverPath -Recurse
 
         # Define the content for StartNet.cmd to auto-run the provisioning script
         $startNetContent = @"
