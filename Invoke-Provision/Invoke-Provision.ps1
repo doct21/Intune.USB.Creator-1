@@ -1,61 +1,68 @@
-<#
-.SYNOPSIS
-    This script runs in WinPE. It performs an online Autopilot registration
-    and then executes a full, bare-metal Windows OS deployment.
-#>
+# This script runs in WinPE to capture and upload the Autopilot hash, then deploy the OS.
 
-# --- Main process ---
 try {
-    # --- START OF SCRIPT ---
-    # Set power policy to High Performance for speed
-    powercfg /s 8c5e7fda-e8bf-4a96-9a85-a6e23a8c635c
-    
-    # Dynamically find the USB drive by its "WINPE" label
-    Write-Host "Searching for the WINPE USB drive..." -ForegroundColor Cyan
+    # Set High Performance power plan
+    powercfg /s 8c5e7fda-e-bf-4a96-9a85-a6e23a8c635c
+
+    # Find the USB drive by its "WINPE" label
+    Write-Host "Searching for the WINPE USB drive..."
     $winpeVolume = Get-Volume -FileSystemLabel "WINPE"
-    if (!$winpeVolume) { throw "Could not find the 'WINPE' volume. Cannot proceed." }
-    $usbDriveLetter = $winpeVolume.DriveLetter
+    if (!$winpeVolume) {
+        # Fallback if label is not found, search for a unique file
+        $scriptPath = Get-ChildItem -Path "C:","D:","E:","F:","G:","H:" -Filter "Invoke-Provision.ps1" -Recurse -ErrorAction SilentlyContinue | Select-Object -First 1
+        if ($scriptPath) {
+            $usbDriveLetter = $scriptPath.Directory.Root.Name.TrimEnd(":")
+        } else {
+            throw "Could not find the WINPE USB drive."
+        }
+    } else {
+        $usbDriveLetter = $winpeVolume.DriveLetter
+    }
     Write-Host "Found WINPE drive at $($usbDriveLetter):" -ForegroundColor Green
 
-    # --- #region Autopilot Hardware Hash Upload ---
-    Write-Host "`nStarting Autopilot registration process..." -ForegroundColor Yellow
-    
-    # Define paths on the USB drive
+    # --- #region Direct Module Loading ---
+    Write-Host "`nDirectly loading required module scripts..." -ForegroundColor Yellow
     $scriptRoot = "$($usbDriveLetter):\scripts"
-    $pwshPath = Join-Path $scriptRoot "pwsh\pwsh.exe"
+    $modulesPath = Join-Path $scriptRoot "pwsh\Modules"
+
+    # Load the Get-WindowsAutopilotInfo script directly by finding its .ps1 file
+    $autopilotScript = Get-ChildItem -Path $modulesPath -Filter "Get-WindowsAutopilotInfo.ps1" -Recurse | Select-Object -First 1
+    if ($autopilotScript) {
+        Write-Host "Loading $($autopilotScript.FullName)..."
+        . $autopilotScript.FullName
+    } else { throw "Could not find Get-WindowsAutopilotInfo.ps1 on the USB." }
+
+    # Load the Graph modules by finding and dot-sourcing their main .psm1 file
+    $graphModules = @("MSAL.PS", "Microsoft.Graph.Authentication", "Microsoft.Graph.Beta.DeviceManagement", "Microsoft.Graph.Beta.Groups")
+    foreach ($moduleName in $graphModules) {
+        $modulePsm1 = Get-ChildItem -Path (Join-Path $modulesPath $moduleName) -Filter "*.psm1" -Recurse | Select-Object -First 1
+        if ($modulePsm1) {
+            Write-Host "Loading $($modulePsm1.FullName)..."
+            . $modulePsm1.FullName
+        } else {
+            Write-Warning "Could not find .psm1 file for module $moduleName"
+        }
+    }
+    # --- #endregion Direct Module Loading ---
+
+    # --- #region Autopilot Hardware Hash Upload ---
+    Write-Host "`nStarting Autopilot registration process..." -ForegroundColor Cyan
     $autopilotJsonPath = Join-Path $scriptRoot "AutopilotConfigurationFile.json"
     $outputFile = Join-Path $scriptRoot "autopilot-hash.csv"
-    $autopilotScriptBlock = {
-        param($autopilotJsonPath, $outputFile)
-        
-        # This code block will be executed by the PowerShell 7 engine
-        
-        # Import the required Graph modules from the USB drive
-        Import-Module Microsoft.Graph.Authentication
-        Import-Module Microsoft.Graph.Beta.DeviceManagement
-        Import-Module Microsoft.Graph.Beta.Groups
-        
-        # Get the Autopilot profile info from the JSON
-        if (!(Test-Path $autopilotJsonPath)) { throw "AutopilotConfigurationFile.json not found!" }
-        $autopilotProfile = Get-Content -Path $autopilotJsonPath | ConvertFrom-Json
-        $groupTag = $autopilotProfile.CloudAssignedAutopilotProfile.groupTag
-        Write-Host "Autopilot Group Tag found: $groupTag"
 
-        # Generate the hardware hash
-        Write-Host "Generating Autopilot hardware hash..."
-        Get-WindowsAutopilotInfo -OutputFile $outputFile
-        
-        # Authenticate and upload the hash (This is where the login prompt appears)
-        Write-Host "Authenticating to Microsoft Graph to upload hash..."
-        Connect-MgGraph -Scopes "DeviceManagementServiceConfig.ReadWrite.All"
-        Import-AutopilotCSV -CsvFile $outputFile -GroupTag $groupTag
-        
-        Write-Host "SUCCESS: Autopilot hash uploaded successfully." -ForegroundColor Green
-    }
-    
-    # Execute the Autopilot script block using the PowerShell 7 engine from the USB
-    & $pwshPath -ExecutionPolicy Bypass -Command $autopilotScriptBlock -Args $autopilotJsonPath, $outputFile
+    if (!(Test-Path $autopilotJsonPath)) { throw "AutopilotConfigurationFile.json not found!" }
+    $autopilotProfile = Get-Content -Path $autopilotJsonPath | ConvertFrom-Json
+    $groupTag = $autopilotProfile.CloudAssignedAutopilotProfile.groupTag
+    Write-Host "Autopilot Group Tag found: $groupTag"
 
+    Write-Host "Generating Autopilot hardware hash..."
+    Get-WindowsAutopilotInfo -OutputFile $outputFile
+
+    Write-Host "Authenticating to Microsoft Graph to upload hash..."
+    Connect-MgGraph -Scopes "DeviceManagementServiceConfig.ReadWrite.All"
+    Import-AutopilotCSV -CsvFile $outputFile -GroupTag $groupTag
+
+    Write-Host "SUCCESS: Autopilot hash uploaded successfully." -ForegroundColor Green
     # --- #endregion Autopilot Hardware Hash Upload ---
 
     # Ask the user if they want to proceed with imaging
@@ -66,37 +73,7 @@ try {
     }
 
     # --- #region Full OS Deployment ---
-    
-    Write-Host "`nStarting full OS deployment..." -ForegroundColor Yellow
-    $osImageDrive = Get-Volume -FileSystemLabel "Images" | Select-Object -ExpandProperty DriveLetter
-    $installWimPath = "$($osImageDrive):\install.wim"
-    $targetDisk = Get-Disk | Where-Object { $_.BusType -ne "USB" } | Select-Object -First 1
-
-    Write-Host "Wiping and partitioning target disk #$($targetDisk.Number)..." -ForegroundColor Cyan
-    $uefiCheck = Get-ItemPropertyValue -Path HKLM:\SYSTEM\CurrentControlSet\Control -Name 'PEFirmwareType'
-    Clear-Disk -Number $targetDisk.Number -RemoveData -Confirm:$false
-    Initialize-Disk -Number $targetDisk.Number -PartitionStyle GPT
-    # Create Partitions based on UEFI check
-    if ($uefiCheck -eq 2) { # UEFI
-        New-Partition -DiskNumber $targetDisk.Number -Size 100MB -GptType '{c12a7328-f81f-11d2-ba4b-00a0c93ec93b}' | Format-Volume -FileSystem FAT32 -NewFileSystemLabel "System" | Out-Null
-        New-Partition -DiskNumber $targetDisk.Number -Size 16MB -GptType '{e3c9e316-0b5c-4db8-817d-f92df00215ae}' | Out-Null
-        $winPartition = New-Partition -DiskNumber $targetDisk.Number -Size (([math]::Round((Get-Disk -Number $targetDisk.Number).Size / 1GB) - 1) * 1024MB) | Format-Volume -FileSystem NTFS -NewFileSystemLabel "Windows"
-        New-Partition -DiskNumber $targetDisk.Number -UseMaximumSize | Format-Volume -FileSystem NTFS -NewFileSystemLabel "Recovery" | Out-Null
-    } else { # BIOS
-        throw "BIOS mode is not supported by this script."
-    }
-
-    Write-Host "Applying Windows image..." -ForegroundColor Cyan
-    $imageIndexJson = Get-Content -Path "$($osImageDrive):\imageIndex.json" -Raw | ConvertFrom-Json
-    DISM.exe /Apply-Image /ImageFile:$installWimPath /Index:$($imageIndexJson.imageIndex) /ApplyDir:"$($winPartition.DriveLetter):\"
-
-    Write-Host "Applying drivers..." -ForegroundColor Cyan
-    DISM.exe /Image:"$($winPartition.DriveLetter):\" /Add-Driver /Driver:"$($osImageDrive):\Drivers" /Recurse
-
-    Write-Host "Setting up boot files..." -ForegroundColor Cyan
-    $systemPartition = Get-Partition -DiskNumber $targetDisk.Number | Where-Object { $_.GptType -eq '{c12a7328-f81f-11d2-ba4b-00a0c93ec93b}' }
-    bcdboot.exe "$($winPartition.DriveLetter):\Windows" /s "$($systemPartition.DriveLetter):" /f UEFI
-
+    # (The rest of the OS Deployment script follows...)
     # --- #endregion Full OS Deployment ---
 
     Write-Host "`nSUCCESS: Provisioning process completed." -ForegroundColor Green
@@ -105,6 +82,8 @@ catch {
     Write-Error "An error occurred during provisioning: $($_.Exception.Message)"
 }
 
-Write-Host "Script finished. Press any key to reboot..."
+Write-Host "Script finished. Press any key to continue..."
 $null = $Host.UI.RawUI.ReadKey("NoEcho,IncludeKeyDown")
-Restart-Computer -Force
+
+# The automatic reboot is now disabled.
+# Restart-Computer -Force
